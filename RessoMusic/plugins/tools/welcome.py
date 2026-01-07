@@ -4,8 +4,10 @@ from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, Message
 from RessoMusic import app
 import config
 
-# --- 💾 Simple Database (Reset on Restart) ---
-welcome_db = []
+# --- 💾 Database (Blacklist Logic) ---
+# Is list mein jo group hoga, wahan welcome BAND rahega.
+# Baaki sab jagah ON rahega.
+welcome_off_db = []
 
 # --- 📝 Your Styled Template (Small Caps English) ---
 WELCOME_TEXT = """
@@ -38,20 +40,20 @@ async def welcome_command(_, message: Message):
 
     # Command Logic
     if len(message.command) < 2:
-        return await message.reply_text("⚠️ **ᴜsᴀɢᴇ:** `/welcome on` **ᴏʀ** `/welcome off`")
+        return await message.reply_text("⚠️ **ᴜsᴀɢᴇ:** `/welcome on` **ᴏʀ** `/welcome off`\n(By Default Welcome ON rehta hai)")
     
     state = message.command[1].lower()
     chat_id = message.chat.id
 
-    if state == "on":
-        if chat_id not in welcome_db:
-            welcome_db.append(chat_id)
-        await message.reply_text("✅ **ᴡᴇʟᴄᴏᴍᴇ sʏsᴛᴇᴍ ᴇɴᴀʙʟᴇᴅ!** \nɴᴇᴡ ᴍᴇᴍʙᴇʀs ᴡɪʟʟ ʙᴇ ᴡᴇʟᴄᴏᴍᴇᴅ. 🌸")
-    
-    elif state == "off":
-        if chat_id in welcome_db:
-            welcome_db.remove(chat_id)
+    if state == "off":
+        if chat_id not in welcome_off_db:
+            welcome_off_db.append(chat_id)
         await message.reply_text("❌ **ᴡᴇʟᴄᴏᴍᴇ sʏsᴛᴇᴍ ᴅɪsᴀʙʟᴇᴅ!**")
+
+    elif state == "on":
+        if chat_id in welcome_off_db:
+            welcome_off_db.remove(chat_id)
+        await message.reply_text("✅ **ᴡᴇʟᴄᴏᴍᴇ sʏsᴛᴇᴍ ᴇɴᴀʙʟᴇᴅ!**")
     
     else:
         await message.reply_text("⚠️ **ᴘʟᴇᴀsᴇ ᴄʜᴏᴏsᴇ:** `on` **ᴏʀ** `off`")
@@ -62,8 +64,8 @@ async def welcome_command(_, message: Message):
 async def auto_welcome(_, message: Message):
     chat_id = message.chat.id
     
-    # Check if Welcome is ON
-    if chat_id not in welcome_db:
+    # 🔥 Logic: Agar group "OFF List" mein hai tabhi rukna hai.
+    if chat_id in welcome_off_db:
         return
 
     for member in message.new_chat_members:
