@@ -193,10 +193,10 @@ async def stream(
             # 1. Determine Silent File (Audio vs Video)
             if status:
                 # Video ke liye silent video file
-                silent_file = "assets/silent_video.mp4"
+                silent_file = "RessoMusic/assets/silent_video.mp4"
             else:
                 # Audio ke liye silent audio file
-                silent_file = "assets/silent.mp3"
+                silent_file = "RessoMusic/assets/silent.mp3"
 
             # 2. Join VC Immediately
             await AMBOTOP.join_call(
@@ -513,3 +513,4 @@ async def stream(
             db[chat_id][0]["markup"] = "tg"
             await mystic.delete()
             
+
