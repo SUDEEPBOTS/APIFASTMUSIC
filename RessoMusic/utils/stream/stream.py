@@ -139,7 +139,7 @@ async def stream(
                 has_spoiler=True
             )
     
-    # 🔥 UPDATED YOUTUBE BLOCK (Supports API + Aria2 + Timer + FAST START + Ghost Fix)
+    # 🔥 UPDATED YOUTUBE BLOCK (Full Feature Set)
     elif streamtype == "youtube":
         link = result["link"]
         vidid = result["vidid"]
@@ -248,6 +248,15 @@ async def stream(
                 await AMBOTOP.leave_call(chat_id)
                 print(f"Fast Download Error: {e}")
                 raise AssistantErr(_["play_14"])
+
+            # 🔥🔥🔥 ZOMBIE FIX + STORAGE CLEANER 🔥🔥🔥
+            # Check if user pressed /stop during download (Queue will be empty)
+            if not db.get(chat_id):
+                try:
+                    os.remove(file_path) # 🗑️ Delete downloaded file to save storage
+                except:
+                    pass
+                return await AMBOTOP.leave_call(chat_id)
 
             # 5. HOT SWAP: Replace Silent File with Real Song
             await AMBOTOP.skip_stream(chat_id, file_path, video=status)
