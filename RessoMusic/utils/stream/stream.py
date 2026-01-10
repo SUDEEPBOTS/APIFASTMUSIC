@@ -1,5 +1,6 @@
-import time  # 🔥 1. Added time module
+import time
 import os
+import asyncio
 from random import randint
 from typing import Union
 
@@ -30,13 +31,14 @@ async def stream(
     spotify: Union[bool, str] = None,
     forceplay: Union[bool, str] = None,
 ):
-    # 🔥 2. Timer Start Here
+    # 🔥 Timer Start
     start_time = time.time()
 
     if not result:
         return
     if forceplay:
         await AMBOTOP.force_stop_stream(chat_id)
+    
     if streamtype == "playlist":
         msg = f"{_['play_19']}\n\n"
         count = 0
@@ -137,7 +139,7 @@ async def stream(
                 has_spoiler=True
             )
     
-    # 🔥 UPDATED YOUTUBE BLOCK (Supports API + Aria2 + Timer)
+    # 🔥 UPDATED YOUTUBE BLOCK (Supports API + Aria2 + Timer + FAST START + Ghost Fix)
     elif streamtype == "youtube":
         link = result["link"]
         vidid = result["vidid"]
@@ -147,27 +149,24 @@ async def stream(
         status = True if video else None
     
         current_queue = db.get(chat_id)
-
         if current_queue is not None and len(current_queue) >= 10:
             return await app.send_message(original_chat_id, "You can't add more than 10 songs to the queue.")
 
-        try:
-            # ✅ Logic: Check if link is Direct (Catbox/HTTP) or YouTube ID
-            if "http" in link and "youtube" not in link and "youtu.be" not in link:
-                # API wala fast download (Aria2 Trigger hoga)
-                file_path, direct = await YouTube.download(
-                    link, mystic, videoid=None, video=status
-                )
-            else:
-                # Purana Fallback (Video ID se download)
-                file_path, direct = await YouTube.download(
-                    vidid, mystic, videoid=True, video=status
-                )
-        except Exception as e:
-            print(f"Download Error: {e}")
-            raise AssistantErr(_["play_14"])
-
         if await is_active_chat(chat_id):
+            # --- NORMAL QUEUE LOGIC (Download Now) ---
+            try:
+                if "http" in link and "youtube" not in link and "youtu.be" not in link:
+                    file_path, direct = await YouTube.download(
+                        link, mystic, videoid=None, video=status
+                    )
+                else:
+                    file_path, direct = await YouTube.download(
+                        vidid, mystic, videoid=True, video=status
+                    )
+            except Exception as e:
+                print(f"Download Error: {e}")
+                raise AssistantErr(_["play_14"])
+
             await put_queue(
                 chat_id,
                 original_chat_id,
@@ -187,19 +186,32 @@ async def stream(
                 reply_markup=InlineKeyboardMarkup(button),
             )
         else:
+            # --- FAST START LOGIC (Silent Join + Background Download) ---
             if not forceplay:
                 db[chat_id] = []
+            
+            # 1. Determine Silent File (Audio vs Video)
+            if status:
+                # Video ke liye silent video file
+                silent_file = "assets/silent_video.mp4"
+            else:
+                # Audio ke liye silent audio file
+                silent_file = "assets/silent.mp3"
+
+            # 2. Join VC Immediately
             await AMBOTOP.join_call(
                 chat_id,
                 original_chat_id,
-                file_path,
+                silent_file,
                 video=status,
                 image=thumbnail,
             )
+
+            # 3. Add to Queue (Placeholder logic so bot knows it's busy)
             await put_queue(
                 chat_id,
                 original_chat_id,
-                file_path if direct else f"vid_{vidid}",
+                f"vid_{vidid}", 
                 title,
                 duration_min,
                 user_name,
@@ -208,10 +220,48 @@ async def stream(
                 "video" if video else "audio",
                 forceplay=forceplay,
             )
+
+            # 4. Background Download with Timeout
+            try:
+                async def download_track():
+                    if "http" in link and "youtube" not in link and "youtu.be" not in link:
+                        return await YouTube.download(
+                            link, mystic, videoid=None, video=status
+                        )
+                    else:
+                        return await YouTube.download(
+                            vidid, mystic, videoid=True, video=status
+                        )
+                
+                # Wait max 45 seconds for download
+                file_path, direct = await asyncio.wait_for(download_track(), timeout=45.0)
+            
+            except asyncio.TimeoutError:
+                # 🔥 FIX: Ghost Entry Removal
+                db[chat_id] = []
+                await AMBOTOP.leave_call(chat_id)
+                return await mystic.edit_text("Sorry, download took too long. Try again.")
+            
+            except Exception as e:
+                # 🔥 FIX: Ghost Entry Removal
+                db[chat_id] = []
+                await AMBOTOP.leave_call(chat_id)
+                print(f"Fast Download Error: {e}")
+                raise AssistantErr(_["play_14"])
+
+            # 5. HOT SWAP: Replace Silent File with Real Song
+            await AMBOTOP.skip_stream(chat_id, file_path, video=status)
+
+            # 6. Update DB with real file path (Important for Replay/Seek)
+            if db.get(chat_id):
+                db[chat_id][0]["file"] = file_path
+
+            # --- End Fast Logic ---
+
             img = await gen_thumb(vidid)
             button = stream_markup(_, chat_id)
 
-            # 🔥 3. Calculate Time & Pass to Caption
+            # Calculate Time
             load_time = round(time.time() - start_time, 2)
 
             run = await app.send_photo(
@@ -222,7 +272,7 @@ async def stream(
                     title[:23],
                     duration_min,
                     user_name,
-                    load_time  # <--- Added Variable for Time
+                    load_time
                 ),
                 reply_markup=InlineKeyboardMarkup(button),
                 has_spoiler=True
